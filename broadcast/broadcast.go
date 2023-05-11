@@ -1,31 +1,19 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
+    "encoding/json"
+    "log"
 
-	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
+    maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
 
 func main() {
     n := maelstrom.NewNode()
     var msg_set map[int]bool = make(map[int]bool)
     var topology []string
-    inited := false
 
     n.Handle("broadcast", func(msg maelstrom.Message) error {
         var body map[string]any
-
-        if !inited {
-            topology = n.NodeIDs()
-            for i,id := range topology {
-                if id == n.ID() {
-                    topology = append(topology[:i], topology[i+1:] ...)
-                    inited = true
-                    break
-                }
-            }
-        }
 
         if err := json.Unmarshal(msg.Body, &body); err != nil {
             return err
@@ -65,23 +53,20 @@ func main() {
     })
 
     n.Handle("topology", func(msg maelstrom.Message) error {
-        var body map[string]any
+        type TopologyBody struct {
+            Msg_id int
+            Type string
+            Topology map[string][]string
+        }
+        var body TopologyBody
 
         if err := json.Unmarshal(msg.Body, &body); err != nil {
             return err
         }
 
-        if topology_map, ok := body["topology"].(map[string]any); ok {
-            topology_map = map[string]any(topology_map)
-            if topology_list, t_ok := topology_map[msg.Dest].([]string); t_ok {
-                topology = []string(topology_list)
-            }
-        }
-
-        body["type"] = "topology_ok"
-        delete(body,"topology")
-
-        return n.Reply(msg, body)
+        topology = body.Topology[msg.Dest]
+        reply := map[string]string{"type": "topology_ok"}
+        return n.Reply(msg, reply)
     })
 
     if err := n.Run(); err != nil {
